@@ -25,3 +25,7 @@ example usage:
         net.tweak(learningrate);
     }
 ```
+
+## features that will (maybe) be added in the future:
+- a way to save and load models
+- more activation functions to choose from and maybe even custom ones
