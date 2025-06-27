@@ -6,14 +6,17 @@ example usage:
     std::vector<bool> X = { false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false };
     std::vector<bool> Y = { true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true };
 
-    NN net({ 1000,1000,1000,1000,1000,20 }, 20);
+    bitnn::NN net({ 20,1000,1000,1000,1000,1000,20 });
     float lowestloss = 99999999.0f;
     int learningrate = 1;
-    int epochs = 10000;
+    int epochs = 1000;
 
-    for (int i = 0; i < epochs; i++) {
+    for (int epoch = 1; epoch < epochs; epoch++) {
+
+        net.tweak(learningrate);
+
         auto out = net.execute(X);
-        float loss = Layer::getloss(out, Y);
+        float loss = bitnn::getloss(out, Y);
 
         if (loss < lowestloss) {
             lowestloss = loss;
@@ -22,7 +25,6 @@ example usage:
         else {
             net.oldparams();
         }
-        net.tweak(learningrate);
     }
 ```
 
