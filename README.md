@@ -32,3 +32,4 @@ example usage:
 - a way to save and load models
 - more activation functions to choose from
 - optimizers
+- make it optionally run on the gpu
