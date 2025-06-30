@@ -21,3 +21,4 @@ example usage:
 - use arrays and bitsets instead of vectors
 - simd
 - async
+- object pool
