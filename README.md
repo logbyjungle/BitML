@@ -19,3 +19,5 @@ example usage:
 - optimizers
 - make it optionally run on the gpu
 - use arrays and bitsets instead of vectors
+- simd
+- async
