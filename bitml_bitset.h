@@ -99,15 +99,39 @@ private:
 
     std::array<void *, SIZE - 1> voidarr;
 
+    template<size_t I>
+    static constexpr inline size_t get() {
+        return VALUES[I];
+    }
 
-public:
-    template <size_t I = 1>
-    NN() {
-        voidarr[I-1] = new Layer<VALUES[I-1], VALUES[I]>;
-        if (I != SIZE-1) {
-            NN<I+1>();
+    template <size_t I = 0>
+    void construct_layers() {
+        if constexpr (I < SIZE - 1) {
+            voidarr[I] = new Layer<get<I>(), get<I+1>()>;
+            construct_layers<I + 1>();
         }
     }
+
+    template <size_t I = 0>
+    void delete_layers() {
+        if constexpr (I < SIZE-1) {
+            delete static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I]);
+            delete_layers<I+1>();
+        }
+    }
+
+public:
+    NN() {
+        construct_layers();
+    }
+
+    ~NN() {
+        delete_layers();
+    }
+
+    // you cannot copy a NN because you would copy the pointers and you will burn, TODO: make it work
+    NN(const NN&) = delete;
+    NN& operator=(const NN&) = delete;
 
     template <size_t I = 1>
     std::array<float, VALUES[SIZE - 1]> execute(std::bitset<VALUES[I-1]> inputs) {
@@ -116,15 +140,13 @@ public:
         auto outputs = (*static_cast<Layer<VALUES[I - 1], VALUES[I]> *>(voidarr[I - 1])).forward(inputs);
 
         if constexpr (I == SIZE-1) {
-            return Layer<VALUES[SIZE-2],VALUES[SIZE-1]>::softmax(outputs); // type mismatch here
+            return Layer<VALUES[SIZE-2],VALUES[SIZE-1]>::softmax(outputs);
         } else {
 
             auto activated = (*static_cast<Layer<VALUES[I - 1], VALUES[I]> *>(voidarr[I - 1])).activation(outputs);
             return execute<I+1>(activated);
         }
 
-        // tuples, void pointer arrays, the issue is that when we use [i] or .get(i) i has to be constexpr
-        // solution: use recursion with functions and templates
     }
 };
 
