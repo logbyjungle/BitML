@@ -26,7 +26,7 @@ public:
     }
 
     inline int result(const std::bitset<N> &inputs) const {
-        return (inputs & weights).count();
+        return static_cast<int>((inputs & weights).count());
     }
 };
 
@@ -101,26 +101,30 @@ private:
 
 
 public:
+    template <size_t I = 1>
     NN() {
-        for (size_t i = 1; i < SIZE; i++) {
-            voidarr[i - 1] = new Layer<VALUES[i - 1], VALUES[i]>;
+        voidarr[I-1] = new Layer<VALUES[I-1], VALUES[I]>;
+        if (I != SIZE-1) {
+            NN<I+1>();
         }
     }
 
-    std::array<float, VALUES[SIZE - 1]> execute(std::bitset<VALUES[0]> inputs) {
+    template <size_t I = 1>
+    std::array<float, VALUES[SIZE - 1]> execute(std::bitset<VALUES[I-1]> inputs) {
 
-        std::array<int, VALUES[SIZE-1]> last_output;
 
-        for (size_t i = 1; i < SIZE; i++) {
-            auto outputs = (*static_cast<Layer<VALUES[i - 1], VALUES[i]> *>(voidarr[i - 1])).forward(inputs);
-            auto activated = (*static_cast<Layer<VALUES[i - 1], VALUES[i]> *>(voidarr[i - 1])).activation(outputs);
-            if (i == SIZE-1) {
-                last_output = outputs;
-            }
+        auto outputs = (*static_cast<Layer<VALUES[I - 1], VALUES[I]> *>(voidarr[I - 1])).forward(inputs);
+
+        if constexpr (I == SIZE-1) {
+            return Layer<VALUES[SIZE-2],VALUES[SIZE-1]>::softmax(outputs); // type mismatch here
+        } else {
+
+            auto activated = (*static_cast<Layer<VALUES[I - 1], VALUES[I]> *>(voidarr[I - 1])).activation(outputs);
+            return execute<I+1>(activated);
         }
-        return Layer<VALUES[SIZE-2],VALUES[SIZE-1]>::softmax(last_output);
 
         // tuples, void pointer arrays, the issue is that when we use [i] or .get(i) i has to be constexpr
+        // solution: use recursion with functions and templates
     }
 };
 
