@@ -28,10 +28,32 @@ public:
     inline int result(const std::bitset<N> &inputs) const {
         return static_cast<int>((inputs & weights).count());
     }
+
+    void tweak() {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::uniform_int_distribution<int> dist(0, 1);
+
+        for (size_t i = 0; i < N; i++) {
+            if (dist(gen) ) {
+                if (bitweights[i] != 255) {
+                    bitweights[i]++;
+                    if (bitweights[i] >= 128) {
+                        weights.set(i);
+                    }
+                }
+            }
+            else if (bitweights[i] != 0) {
+                bitweights[i]--;
+                if (bitweights[i] <= 127) {
+                    weights.reset(i);
+                }
+            }
+        }
+    }
 };
 
-template <size_t N,
-          size_t M> // 2nd is the number of neurons, 1st is the number of inputs
+template <size_t N, size_t M> // 2nd is the number of neurons, 1st is the number of inputs
 class Layer {
 private:
     std::array<bitnn::Neuron<N>, M> neurons;
@@ -56,6 +78,13 @@ public:
         }
         return outputs;
     }
+
+    void tweak() {
+        for (size_t i = 0; i < M; ++i) {
+            neurons[i].tweak();
+        }
+    }
+
 
     std::bitset<M> activation(const std::array<int, M> &inputs, std::bitset<M> (*activation_func)(const std::array<int, M> &) = default_activation) const {
         return activation_func(inputs);
@@ -147,6 +176,14 @@ public:
             return execute<I+1>(activated);
         }
 
+    }
+
+    template <size_t I = 0>
+    void tweak() {
+        if constexpr (I < SIZE-1) {
+            (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).tweak();
+            tweak<I+1>();
+        }
     }
 };
 
