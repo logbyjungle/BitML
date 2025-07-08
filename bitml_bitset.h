@@ -38,7 +38,7 @@ public:
         for (size_t i = 0; i < N; i++) {
             if (dist(gen) ) {
                 if (bitweights[i] + learningrate <= 255) {
-                    bitweights[i] += learningrate;
+                    bitweights[i] += static_cast<uint8_t>(learningrate);
                     if (bitweights[i] >= 128) {
                         weights.set(i);
                     }
@@ -49,7 +49,7 @@ public:
                 }
             }
             else if (bitweights[i] - learningrate >= 0) {
-                bitweights[i] -= learningrate;
+                bitweights[i] -= static_cast<uint8_t>(learningrate);
                 if (bitweights[i] <= 127) {
                     weights.reset(i);
                 }
@@ -263,7 +263,7 @@ class Optimizer {
         assert((XS.size() == YS.size()) && "inputs and outputs size mismatch");
     }
 
-    void randomsearch(const int& learningrate = 1) {
+    void randomsearch(const int& learningrate = 1) { // assert a maximum value of learningrate in all funcs
         float lowestloss = 99999999.9f;
         if  (DEBUGMODE >= 1) {
             std::cout << "starting training...\n";
