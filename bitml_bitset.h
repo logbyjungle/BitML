@@ -30,26 +30,33 @@ public:
         return static_cast<int>((inputs & weights).count());
     }
 
-    void tweak() {
+    void tweak(const int& learningrate = 1) {
         static std::random_device rd;
         static std::mt19937 gen(rd());
         static std::uniform_int_distribution<int> dist(0, 1);
 
         for (size_t i = 0; i < N; i++) {
-            // when we add learningrate we have to check if the new result will be higher or lower than 255
             if (dist(gen) ) {
-                if (bitweights[i] != 255) {
-                    bitweights[i]++;
+                if (bitweights[i] + learningrate <= 255) {
+                    bitweights[i] += learningrate;
                     if (bitweights[i] >= 128) {
                         weights.set(i);
                     }
                 }
+                else {
+                    bitweights[i] = 255;
+                    weights.set(i);
+                }
             }
-            else if (bitweights[i] != 0) {
-                bitweights[i]--;
+            else if (bitweights[i] - learningrate >= 0) {
+                bitweights[i] -= learningrate;
                 if (bitweights[i] <= 127) {
                     weights.reset(i);
                 }
+            }
+            else {
+                bitweights[i] = 0;
+                weights.reset(i);
             }
         }
     }
@@ -70,7 +77,7 @@ public:
     }
 };
 
-template <size_t N, size_t M> // 2nd is the number of neurons, 1st is the number of inputs
+template <size_t N, size_t M> // 1st is the number of inputs 2nd is the number of neurons
 class Layer {
 private:
     std::array<bitnn::Neuron<N>, M> neurons;
@@ -96,9 +103,9 @@ public:
         return outputs;
     }
 
-    void tweak() {
+    void tweak(const int& learningrate = 1) {
         for (size_t i = 0; i < M; ++i) {
-            neurons[i].tweak();
+            neurons[i].tweak(learningrate);
         }
     }
 
@@ -126,6 +133,7 @@ public:
         for (size_t i = 0; i < M; i++) {
             exparr[i] = std::exp(static_cast<float>(inputs[i] - maxval));
         }
+
         float sumexp = std::accumulate(exparr.begin(), exparr.end(), 0.0f);
 
         for (size_t i = 0; i < M; i++) {
@@ -206,10 +214,10 @@ public:
     }
 
     template <size_t I = 0>
-    void tweak() {
+    void tweak(const int& learningrate = 1) {
         if constexpr (I < SIZE-1) {
-            (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).tweak();
-            tweak<I+1>();
+            (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).tweak(learningrate);
+            tweak<I+1>(learningrate);
         }
     }
 
@@ -244,7 +252,7 @@ class Optimizer {
     static constexpr size_t PRELAST = ARR[SIZE-2];
 
     const std::vector<std::bitset<FIRST>> XS;
-    const std::vector<std::bitset<FIRST>> YS;
+    const std::vector<std::bitset<LAST>> YS;
 
     const int DEBUGMODE;
 
@@ -252,10 +260,10 @@ class Optimizer {
 
     Optimizer(NN<Values...>& network, const int& epochs , const std::vector<std::bitset<FIRST>>& Xs, const std::vector<std::bitset<LAST>>& Ys, const int& debugmode = 0)
     : net(network), EPOCHS(epochs), XS(Xs), YS(Ys),DEBUGMODE(debugmode) {
-        // assert that Xs.size() is the same as Ys'
+        assert((XS.size() == YS.size()) && "inputs and outputs size mismatch");
     }
 
-    void randomsearch() {
+    void randomsearch(const int& learningrate = 1) {
         float lowestloss = 99999999.9f;
         if  (DEBUGMODE >= 1) {
             std::cout << "starting training...\n";
@@ -263,6 +271,7 @@ class Optimizer {
 
         for (int epoch = 1; epoch <= EPOCHS; epoch++) {
             float totalloss = 0.0f;
+
             for (size_t i = 0; i < XS.size(); i++) {
                 auto out = net.execute(XS[i]);
                 float loss = Layer<PRELAST,LAST>::getloss(out, YS[i]);
@@ -282,7 +291,7 @@ class Optimizer {
                 net.oldparams();
             }
 
-            net.tweak(); // add learning rate, as a parameter of randomsearch and tweak
+            net.tweak(learningrate);
 
         }
 
