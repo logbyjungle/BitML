@@ -31,6 +31,7 @@ public:
     }
 
     void tweak(const int& learningrate = 1) {
+        assert(learningrate >= 0 && learningrate <= 255 && "learning rate isnt in the range 0-255");
         static std::random_device rd;
         static std::mt19937 gen(rd());
         static std::uniform_int_distribution<int> dist(0, 1);
@@ -185,6 +186,14 @@ private:
         }
     }
 
+    template<size_t I = 0>
+    void copy_nn(const NN& othernn) {
+        if constexpr (I < SIZE - 1) {
+            voidarr[I] = new Layer<get<I>(), get<I+1>()>(*static_cast<Layer<get<I>(),get<I+1>()>*>(othernn.voidarr[I]));
+            copy_nn<I+1>(othernn);
+        }
+    }
+
 public:
     NN() {
         construct_layers();
@@ -194,9 +203,17 @@ public:
         delete_layers();
     }
 
-    // you cannot copy a NN because you would copy the pointers and you will burn, TODO: make it work
-    NN(const NN&) = delete;
-    NN& operator=(const NN&) = delete;
+    NN(const NN& othernn) {
+        copy_nn(othernn);
+    }
+
+    NN& operator=(const NN& othernn) {
+        if (this != &othernn) {
+            delete_layers();
+            copy_nn(othernn);
+        }
+        return *this;
+    }
 
     template <size_t I = 1>
     std::array<float, VALUES[SIZE - 1]> execute(std::bitset<VALUES[I-1]> inputs) {
@@ -263,7 +280,7 @@ class Optimizer {
         assert((XS.size() == YS.size()) && "inputs and outputs size mismatch");
     }
 
-    void randomsearch(const int& learningrate = 1) { // assert a maximum value of learningrate in all funcs
+    void randomsearch(const int& learningrate = 1) {
         float lowestloss = 99999999.9f;
         if  (DEBUGMODE >= 1) {
             std::cout << "starting training...\n";
