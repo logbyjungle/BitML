@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <tuple>
 #include <bitset>
 #include <cassert>
 #include <cmath>
@@ -25,7 +26,7 @@ public:
         bestbitweights = bitweights;
     }
 
-    inline int result(const std::bitset<N> &inputs) const {
+    int result(const std::bitset<N> &inputs) const {
         return static_cast<int>((inputs & weights).count());
     }
 
@@ -35,6 +36,7 @@ public:
         static std::uniform_int_distribution<int> dist(0, 1);
 
         for (size_t i = 0; i < N; i++) {
+            // when we add learningrate we have to check if the new result will be higher or lower than 255
             if (dist(gen) ) {
                 if (bitweights[i] != 255) {
                     bitweights[i]++;
@@ -48,6 +50,21 @@ public:
                 if (bitweights[i] <= 127) {
                     weights.reset(i);
                 }
+            }
+        }
+    }
+
+    void newbestparams() {
+        bestbitweights = bitweights;
+    }
+
+    void oldparams() {
+        bitweights = bestbitweights;
+        for (size_t i = 0; i < N; i++) {
+            if (bitweights[i] >= 128) {
+                weights.set(i);
+            } else {
+                weights.reset(i);
             }
         }
     }
@@ -85,6 +102,17 @@ public:
         }
     }
 
+    void newbestparams() {
+        for (size_t i = 0; i < M; ++i) {
+            neurons[i].newbestparams();
+        }
+    }
+
+    void oldparams() {
+        for (size_t i = 0; i < M; ++i) {
+            neurons[i].oldparams();
+        }
+    }
 
     std::bitset<M> activation(const std::array<int, M> &inputs, std::bitset<M> (*activation_func)(const std::array<int, M> &) = default_activation) const {
         return activation_func(inputs);
@@ -129,7 +157,7 @@ private:
     std::array<void *, SIZE - 1> voidarr;
 
     template<size_t I>
-    static constexpr inline size_t get() {
+    static constexpr size_t get() {
         return VALUES[I];
     }
 
@@ -165,7 +193,6 @@ public:
     template <size_t I = 1>
     std::array<float, VALUES[SIZE - 1]> execute(std::bitset<VALUES[I-1]> inputs) {
 
-
         auto outputs = (*static_cast<Layer<VALUES[I - 1], VALUES[I]> *>(voidarr[I - 1])).forward(inputs);
 
         if constexpr (I == SIZE-1) {
@@ -185,6 +212,86 @@ public:
             tweak<I+1>();
         }
     }
+
+    template <size_t I = 0>
+    void newbestparams() {
+        if constexpr (I < SIZE-1) {
+            (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).newbestparams();
+            newbestparams<I+1>();
+        }
+    }
+
+    template <size_t I = 0>
+        void oldparams() {
+            if constexpr (I < SIZE-1) {
+                (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).oldparams();
+                newbestparams<I+1>();
+            }
+        }
+
 };
+
+template <size_t ...Values>
+class Optimizer {
+
+  private:
+    NN<Values...>& net;
+    const int EPOCHS;
+    static constexpr size_t SIZE = sizeof...(Values);
+    static constexpr std::array<size_t, SIZE> ARR = {Values...};
+    static constexpr size_t FIRST = ARR[0];
+    static constexpr size_t LAST = ARR[SIZE-1];
+    static constexpr size_t PRELAST = ARR[SIZE-2];
+
+    const std::vector<std::bitset<FIRST>> XS;
+    const std::vector<std::bitset<FIRST>> YS;
+
+    const int DEBUGMODE;
+
+  public:
+
+    Optimizer(NN<Values...>& network, const int& epochs , const std::vector<std::bitset<FIRST>>& Xs, const std::vector<std::bitset<LAST>>& Ys, const int& debugmode = 0)
+    : net(network), EPOCHS(epochs), XS(Xs), YS(Ys),DEBUGMODE(debugmode) {
+        // assert that Xs.size() is the same as Ys'
+    }
+
+    void randomsearch() {
+        float lowestloss = 99999999.9f;
+        if  (DEBUGMODE >= 1) {
+            std::cout << "starting training...\n";
+        }
+
+        for (int epoch = 1; epoch <= EPOCHS; epoch++) {
+            float totalloss = 0.0f;
+            for (size_t i = 0; i < XS.size(); i++) {
+                auto out = net.execute(XS[i]);
+                float loss = Layer<PRELAST,LAST>::getloss(out, YS[i]);
+                totalloss += loss;
+            }
+            if (totalloss < lowestloss) {
+                lowestloss = totalloss;
+                net.newbestparams();
+                if (DEBUGMODE >= 2) {
+                    std::cout << "new lowest loss:\n";
+                    std::cout << "epoch: " << epoch << "  loss: " << totalloss/static_cast<float>(XS.size()) << "  lowestloss: " << lowestloss/static_cast<float>(XS.size()) << "\n";
+                }
+            } else {
+                if (DEBUGMODE >= 3) {
+                    std::cout << "epoch: " << epoch << "  loss: " << totalloss/static_cast<float>(XS.size()) << "  lowestloss: " << lowestloss/static_cast<float>(XS.size()) << "\n";
+                }
+                net.oldparams();
+            }
+
+            net.tweak(); // add learning rate, as a parameter of randomsearch and tweak
+
+        }
+
+        if (DEBUGMODE >= 1) {
+            std::cout << "ending tranining...\n";
+        }
+
+    }
+};
+
 
 } // namespace bitnn
