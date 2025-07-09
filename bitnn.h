@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <tuple>
 #include <bitset>
 #include <cassert>
@@ -21,8 +22,25 @@ private:
     std::array<uint8_t, N> bestbitweights;
 
 public:
+// maybe a bunch of functions are public for no reason, maybe not just in the Neuron class
     Neuron() {
         bitweights.fill(127);
+        bestbitweights = bitweights;
+    }
+
+    const std::bitset<N>& get_weights() const {
+        return weights;
+    }
+
+    void set_weights(const std::bitset<N>& new_weights) {
+        weights = new_weights;
+        for (size_t i = 0; i < N; i++) {
+            if (weights[i]) {
+                bitweights[i] = 128;
+            } else {
+                bitweights[i] = 127;
+            }
+        }
         bestbitweights = bitweights;
     }
 
@@ -102,6 +120,10 @@ public:
             outputs[i] = neurons[i].result(inputs);
         }
         return outputs;
+    }
+
+    Neuron<N>& get_neuron(size_t index) {
+        return neurons[index];
     }
 
     void tweak(const int& learningrate = 1) {
@@ -207,6 +229,88 @@ public:
         copy_nn(othernn);
     }
 
+    template<size_t I = 0>
+    void load_0(std::ifstream& file) {
+        if constexpr (I < SIZE - 1) { // for layer in NN
+            auto* layer = static_cast<Layer<get<I>(), get<I+1>()>*>(voidarr[I]);
+            for (size_t i = 0; i < get<I+1>(); ++i) { // for neuron in layer
+                auto& neuron = (*layer).get_neuron(i);
+                size_t num_bytes = (get<I>() + 7) / 8;
+                std::vector<uint8_t> bits(num_bytes);
+
+                file.read(reinterpret_cast<char*>(bits.data()), static_cast<std::streamsize>(num_bytes));
+                std::bitset<get<I>()> loaded_weights;
+                for (size_t j = 0; j < get<I>(); ++j) { // for weight in neuron
+                    if (bits[j / 8] & (1 << (j % 8))) {
+                        loaded_weights.set(j);
+                    }
+                }
+                neuron.set_weights(loaded_weights);
+
+            }
+            load_0<I + 1>(file);
+        }
+    }
+
+    template <size_t I = 0>
+    void save_0(std::ofstream& file) {
+        if constexpr (I < SIZE - 1) { // for layer in NN
+
+            auto* layer = static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I]);
+            for (size_t i = 0; i < get<I+1>(); i++) { // for neuron in layer
+                const auto& neuron = (*layer).get_neuron(i);
+                const auto& weights = neuron.get_weights();
+                size_t num_bytes = (get<I>() + 7) / 8;
+                std::vector<uint8_t> bits(num_bytes, 0);
+                for (size_t j = 0; j < get<I>(); j++) { // for inputweights in neuron
+                    if (weights[j]) {
+                        bits[j / 8] |= (1 << (j % 8));
+                    }
+                }
+                file.write(reinterpret_cast<char*>(bits.data()), static_cast<std::streamsize>(num_bytes));
+            }
+
+            save_0<I+1>(file);
+        }
+    }
+
+    void save(std::string filename = "", const int& mode = 0) {
+        // add setting to override file if it already exists, also we have to input a name
+        if (filename.empty() || filename.size() < 6 || std::filesystem::exists(filename)) {
+            int number = 0;
+            do {
+                number++;
+                filename = "model_" + std::to_string(number) + ".blmod";
+            }
+            while (std::filesystem::exists(filename));
+        }
+        else if (filename.substr(filename.size() - 6) != ".blmod") {
+            filename += ".blmod";
+        }
+        std::ofstream file(filename, std::ios::binary);
+
+        // saving just the bitset values and not the traning ones
+        if (mode == 0) {
+            save_0(file);
+            std::cout << "saved model (no training values) to file " << filename << "\n";
+        }
+
+        file.close();
+    }
+
+    void load(const std::string& filename, const int& mode = 0) {
+        if (! std::filesystem::exists(filename)) {
+            std::cout << "unable to find file " << filename << "\n";
+            return;
+        }
+        std::ifstream file(filename, std::ios::binary);
+        if (mode == 0) {
+            load_0(file);
+            std::cout << "loaded model (no training values) to file " << filename << "\n";
+        }
+        file.close();
+    }
+
     NN& operator=(const NN& othernn) {
         if (this != &othernn) {
             delete_layers();
@@ -250,7 +354,7 @@ public:
         void oldparams() {
             if constexpr (I < SIZE-1) {
                 (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).oldparams();
-                newbestparams<I+1>();
+                oldparams<I+1>();
             }
         }
 
@@ -294,6 +398,7 @@ class Optimizer {
                 float loss = Layer<PRELAST,LAST>::getloss(out, YS[i]);
                 totalloss += loss;
             }
+
             if (totalloss < lowestloss) {
                 lowestloss = totalloss;
                 net.newbestparams();
