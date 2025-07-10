@@ -5,13 +5,51 @@
 #include <iostream>
 #include <random>
 
-
 namespace bitnn {
+
+class Randomness{
+    private:
+
+    static inline constexpr uint64_t rotl(const uint64_t x, int k) noexcept {
+        return (x << k) | (x >> (64 - k));
+    }
+
+    static inline uint64_t s0 = 123456789ULL;
+    static inline uint64_t s1 = 987654321ULL;
+
+    public:
+
+    static uint64_t next() noexcept {
+
+
+        const uint64_t result = rotl(s0 * 5, 7) * 9;
+
+        s1 ^= s0;
+        s0 = rotl(s0, 24) ^ s1 ^ (s1 << 16);
+        s1 = rotl(s1, 37);
+
+        return result;
+    }
+
+    static inline bool next_bool() noexcept {
+
+        static uint64_t call = 64;
+        static uint64_t val = next();
+        if (!call) {
+            call = 64;
+            val = next();
+        }
+        call--;
+        return (val & call) != 0;
+    }
+
+};
 
 template <size_t N> // N is the number of inputs
 class Neuron {
 private:
     std::bitset<N> weights;
+    std::bitset<N> bestweights;
     std::array<uint8_t, N> bitweights;
     std::array<uint8_t, N> bestbitweights;
 
@@ -23,11 +61,12 @@ public:
     }
 
     const std::bitset<N>& get_weights() const {
-        return weights;
+        return bestweights;
     }
 
     void set_weights(const std::bitset<N>& new_weights) {
         weights = new_weights;
+        bestweights = weights;
         for (size_t i = 0; i < N; i++) {
             if (weights[i]) {
                 bitweights[i] = 128;
@@ -42,14 +81,10 @@ public:
         return static_cast<int>((inputs & weights).count());
     }
 
-    void tweak(const int& learningrate = 1) {
-        assert(learningrate >= 0 && learningrate <= 255 && "learning rate isnt in the range 0-255");
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        static std::uniform_int_distribution<int> dist(0, 1);
-
+    // this function is really slow
+    void tweak(const uint8_t& learningrate = 1) {
         for (size_t i = 0; i < N; i++) {
-            if (dist(gen) ) {
+            if (Randomness::next_bool()) {
                 if (bitweights[i] + learningrate <= 255) {
                     bitweights[i] += static_cast<uint8_t>(learningrate);
                     if (bitweights[i] >= 128) {
@@ -75,18 +110,13 @@ public:
     }
 
     void newbestparams() {
+        bestweights = weights;
         bestbitweights = bitweights;
     }
 
     void oldparams() {
         bitweights = bestbitweights;
-        for (size_t i = 0; i < N; i++) {
-            if (bitweights[i] >= 128) {
-                weights.set(i);
-            } else {
-                weights.reset(i);
-            }
-        }
+        weights = bestweights;
     }
 };
 
@@ -97,10 +127,8 @@ private:
 
     static std::bitset<M> default_activation(const std::array<int, M> &inputs) {
         std::bitset<M> outputs;
-        for (size_t i = 0; i < M; i++) {
-            if (inputs[i]) {
-                outputs.set(i);
-            }
+        for (size_t i = 0; i < M; ++i) {
+            outputs.set(i,inputs[i] != 0);
         }
         return outputs;
     }
@@ -120,7 +148,7 @@ public:
         return neurons[index];
     }
 
-    void tweak(const int& learningrate = 1) {
+    void tweak(const uint8_t& learningrate = 1) {
         for (size_t i = 0; i < M; ++i) {
             neurons[i].tweak(learningrate);
         }
@@ -160,7 +188,7 @@ public:
     }
 
     static float getloss(const std::array<float, M> &smaxedin, const std::bitset<M> &rightout) {
-        constexpr float EPSILON = 1e-7f;
+        static constexpr float EPSILON = 1e-7f;
         float loss = 0.0f;
         for (size_t i = 0; i < M; i++) {
             float p = std::min(std::max(smaxedin[i], EPSILON), 1.0f - EPSILON);
@@ -270,7 +298,7 @@ public:
 
     void save(std::string filename = "", const int& mode = 0) {
         // add setting to override file if it already exists, also we have to input a name
-        if (filename.empty() || filename.size() < 6 || std::filesystem::exists(filename)) {
+        if (filename.empty() || std::filesystem::exists(filename)) {
             int number = 0;
             do {
                 number++;
@@ -278,6 +306,7 @@ public:
             }
             while (std::filesystem::exists(filename));
         }
+        // i think that not checking if the size >= 6 before doing substr isnt very fine
         else if (filename.substr(filename.size() - 6) != ".blmod") {
             filename += ".blmod";
         }
@@ -329,7 +358,7 @@ public:
     }
 
     template <size_t I = 0>
-    void tweak(const int& learningrate = 1) {
+    void tweak(const uint8_t& learningrate = 1) {
         if constexpr (I < SIZE-1) {
             (*static_cast<Layer<get<I>(),get<I+1>()>*>(voidarr[I])).tweak(learningrate);
             tweak<I+1>(learningrate);
@@ -354,7 +383,7 @@ public:
 
 };
 
-template <size_t ...Values>
+template <size_t L, size_t ...Values>
 class Optimizer {
 
   private:
@@ -366,19 +395,18 @@ class Optimizer {
     static constexpr size_t LAST = ARR[SIZE-1];
     static constexpr size_t PRELAST = ARR[SIZE-2];
 
-    const std::vector<std::bitset<FIRST>> XS;
-    const std::vector<std::bitset<LAST>> YS;
+    const std::array<std::bitset<FIRST>,L>& XS;
+    const std::array<std::bitset<FIRST>,L>& YS;
 
     const int DEBUGMODE;
 
   public:
 
-    Optimizer(NN<Values...>& network, const int& epochs , const std::vector<std::bitset<FIRST>>& Xs, const std::vector<std::bitset<LAST>>& Ys, const int& debugmode = 0)
+    Optimizer(NN<Values...>& network, const int& epochs ,const std::array<std::bitset<FIRST>,L>& Xs, const std::array<std::bitset<FIRST>,L>& Ys, const int& debugmode = 0)
     : net(network), EPOCHS(epochs), XS(Xs), YS(Ys),DEBUGMODE(debugmode) {
-        assert((XS.size() == YS.size()) && "inputs and outputs size mismatch");
     }
 
-    void randomsearch(const int& learningrate = 1) {
+    void randomsearch(const uint8_t& learningrate = 1) {
         float lowestloss = 99999999.9f;
         if  (DEBUGMODE >= 1) {
             std::cout << "starting training...\n";
@@ -387,7 +415,7 @@ class Optimizer {
         for (int epoch = 1; epoch <= EPOCHS; epoch++) {
             float totalloss = 0.0f;
 
-            for (size_t i = 0; i < XS.size(); i++) {
+            for (size_t i = 0; i < L ; i++) {
                 auto out = net.execute(XS[i]);
                 float loss = Layer<PRELAST,LAST>::getloss(out, YS[i]);
                 totalloss += loss;
