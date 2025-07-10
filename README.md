@@ -18,7 +18,7 @@ example usage:
 - ability to save training models
 - more activation functions to choose from
 - optimizers
-- make it optionally run on the gpu
+- make a version for cuda
 - simd
 - async
 - object pool
