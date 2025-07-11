@@ -22,3 +22,4 @@ example usage:
 - simd
 - async
 - object pool
+- other NN types such as CNN(with GRU?), RNN or LSTM, GAN
