@@ -16,7 +16,6 @@ example usage:
 
 ## features that will (maybe) be added in the future:
 - ability to save training models
-- more activation functions to choose from
 - optimizers
 - make a version for cuda
 - simd
