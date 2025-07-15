@@ -21,7 +21,6 @@ class Randomness{
 
     static uint64_t next() noexcept {
 
-
         const uint64_t result = rotl(s0 * 5, 7) * 9;
 
         s1 ^= s0;
@@ -326,10 +325,13 @@ public:
         file.close();
     }
 
-    void load(const std::string& filename, const int& mode = 0) {
+    void load(std::string filename, const int& mode = 0) {
         if (! std::filesystem::exists(filename)) {
-            std::cout << "unable to find file " << filename << '\n';
-            return;
+            filename += ".blmod";
+            if (! std::filesystem::exists(filename)) {
+                std::cout << "unable to find file " << filename << '\n';
+                return;
+            }
         }
         std::ifstream file(filename, std::ios::binary);
         if (mode == 0) {
