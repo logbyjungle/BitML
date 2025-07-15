@@ -9,9 +9,11 @@ example usage:
     int learning_rate = 2
 
     bitnn::Optimizer opt(net, epochs, Xs, Ys);
-    opt.randomsearch(learning_rate);
+// 2 is the type of activation function that is used, 50 is the parameter that it uses
+    opt.randomsearch<2,50>(learning_rate);
 
     net.save("model0");
+// the model can also be loaded with net.load("model0")
 ```
 
 ## features that will (maybe) be added in the future:
