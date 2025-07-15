@@ -8,6 +8,9 @@ example usage:
     int epochs = 100;
     int learning_rate = 2
 
+	std::array<std::bitset<5>, 1> Xs {std::bitset<5>("10011")};
+	std::array<std::bitset<5>, 1> Ys {std::bitset<5>("01100")};
+
     bitnn::Optimizer opt(net, epochs, Xs, Ys);
 // 2 is the type of activation function that is used, 50 is the parameter that it uses
     opt.randomsearch<2,50>(learning_rate);
